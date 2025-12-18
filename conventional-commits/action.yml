@@ -1,0 +1,195 @@
+name: "Conventional Commits Validator"
+description: "Valida que los commits y títulos de PR sigan la especificación de Conventional Commits"
+
+inputs:
+  validate_commits:
+    description: "Validate all commits in the PR (true/false)"
+    default: "true"
+    required: false
+
+  validate_pr_title:
+    description: "Validate PR title follows conventional commits (true/false)"
+    default: "true"
+    required: false
+
+  allowed_types:
+    description: "Comma-separated list of allowed commit types"
+    default: "feat,fix,docs,style,refactor,perf,test,build,ci,chore,revert"
+    required: false
+
+  require_scope:
+    description: "Require scope in commit messages (true/false)"
+    default: "false"
+    required: false
+
+  min_subject_length:
+    description: "Minimum length for commit subject"
+    default: "3"
+    required: false
+
+  max_subject_length:
+    description: "Maximum length for commit subject"
+    default: "100"
+    required: false
+
+  fail_on_error:
+    description: "Fail the workflow if validation fails (true/false)"
+    default: "true"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install commitlint
+      run: |
+        echo "📦 Installing commitlint..."
+        npm install -g @commitlint/cli @commitlint/config-conventional
+      shell: bash
+
+    - name: Create commitlint config
+      run: |
+        echo "⚙️  Creating commitlint configuration..."
+        cat > commitlint.config.js << 'EOF'
+        module.exports = {
+          extends: ['@commitlint/config-conventional'],
+          rules: {
+            'type-enum': [2, 'always', '${{ inputs.allowed_types }}'.split(',')],
+            'scope-empty': [${{ inputs.require_scope == 'true' && '2' || '0' }}, 'never'],
+            'subject-min-length': [2, 'always', ${{ inputs.min_subject_length }}],
+            'subject-max-length': [2, 'always', ${{ inputs.max_subject_length }}],
+            'subject-case': [2, 'always', 'lower-case'],
+            'type-case': [2, 'always', 'lower-case'],
+            'scope-case': [2, 'always', 'lower-case'],
+            'header-max-length': [2, 'always', 150]
+          }
+        };
+        EOF
+        cat commitlint.config.js
+      shell: bash
+
+    - name: Validate PR Title
+      if: ${{ github.event_name == 'pull_request' && inputs.validate_pr_title == 'true' }}
+      run: |
+        echo "🔍 Validating PR title..."
+        PR_TITLE="${{ github.event.pull_request.title }}"
+        echo "PR Title: $PR_TITLE"
+        
+        EXIT_CODE=0
+        echo "$PR_TITLE" | npx commitlint || EXIT_CODE=$?
+        
+        if [ $EXIT_CODE -ne 0 ]; then
+          echo "❌ PR title does not follow Conventional Commits specification"
+          echo ""
+          echo "📋 Expected format:"
+          echo "  <type>[optional scope]: <description>"
+          echo ""
+          echo "Examples:"
+          echo "  feat: add new user authentication"
+          echo "  fix(api): resolve database connection timeout"
+          echo "  docs: update README with installation steps"
+          echo ""
+          echo "Allowed types: ${{ inputs.allowed_types }}"
+          
+          if [ "${{ inputs.fail_on_error }}" == "true" ]; then
+            exit 1
+          fi
+        else
+          echo "✅ PR title is valid"
+        fi
+      shell: bash
+
+    - name: Validate Commits
+      if: ${{ github.event_name == 'pull_request' && inputs.validate_commits == 'true' }}
+      run: |
+        echo "🔍 Validating commits in PR..."
+        
+        # Get base and head refs
+        BASE_REF="${{ github.event.pull_request.base.sha }}"
+        HEAD_REF="${{ github.event.pull_request.head.sha }}"
+        
+        echo "Base: $BASE_REF"
+        echo "Head: $HEAD_REF"
+        
+        # Get all commit messages
+        COMMITS=$(git log --format=%s $BASE_REF..$HEAD_REF)
+        
+        if [ -z "$COMMITS" ]; then
+          echo "⚠️  No commits found to validate"
+          exit 0
+        fi
+        
+        echo "📝 Commits to validate:"
+        echo "$COMMITS"
+        echo ""
+        
+        # Validate each commit
+        FAILED=0
+        FAILED_COMMITS=""
+        
+        while IFS= read -r commit; do
+          if [ -n "$commit" ]; then
+            echo "Checking: $commit"
+            EXIT_CODE=0
+            echo "$commit" | npx commitlint || EXIT_CODE=$?
+            
+            if [ $EXIT_CODE -ne 0 ]; then
+              FAILED=$((FAILED + 1))
+              FAILED_COMMITS="${FAILED_COMMITS}\n  ❌ $commit"
+            else
+              echo "  ✅ Valid"
+            fi
+            echo ""
+          fi
+        done <<< "$COMMITS"
+        
+        # Summary
+        TOTAL=$(echo "$COMMITS" | grep -c '^')
+        PASSED=$((TOTAL - FAILED))
+        
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "📊 Validation Summary"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Total commits: $TOTAL"
+        echo "Passed: $PASSED"
+        echo "Failed: $FAILED"
+        
+        if [ $FAILED -gt 0 ]; then
+          echo ""
+          echo "Failed commits:$FAILED_COMMITS"
+          echo ""
+          echo "📋 Conventional Commits Format:"
+          echo "  <type>[optional scope]: <description>"
+          echo ""
+          echo "  [optional body]"
+          echo ""
+          echo "  [optional footer(s)]"
+          echo ""
+          echo "Examples:"
+          echo "  feat: add user login functionality"
+          echo "  fix(auth): resolve token expiration issue"
+          echo "  docs: update API documentation"
+          echo "  style: format code with prettier"
+          echo "  refactor(database): optimize query performance"
+          echo "  test: add unit tests for user service"
+          echo "  chore: update dependencies"
+          echo ""
+          echo "Allowed types: ${{ inputs.allowed_types }}"
+          
+          if [ "${{ inputs.fail_on_error }}" == "true" ]; then
+            exit 1
+          fi
+        else
+          echo "✅ All commits follow Conventional Commits specification"
+        fi
+      shell: bash
+
+    - name: Cleanup
+      if: always()
+      run: |
+        rm -f commitlint.config.js
+      shell: bash
