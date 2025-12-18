@@ -1,0 +1,50 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+
+categories:
+  - title: '🚀 Features'
+    labels: ['feature', 'enhancement', 'feat']
+  - title: '🐛 Bug Fixes'
+    labels: ['fix', 'bugfix', 'bug']
+  - title: '📚 Documentation'
+    labels: ['documentation', 'docs']
+  - title: '🔧 Maintenance'
+    labels: ['chore', 'dependencies']
+
+# Template para cada cambio
+change-template: '- $TITLE ([#$NUMBER]($URL)) @$AUTHOR'
+
+# Extractor de issues del cuerpo del PR
+# Busca patrones como: "Closes #123", "Fixes #456", "Resolves #789"
+replacers:
+  - search: '/(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s*#(\d+)/gi'
+    replace: '(closes #$1)'
+
+change-title-escapes: '\<*_&'
+
+version-resolver:
+  major:
+    labels: ['major', 'breaking']
+  minor:
+    labels: ['minor', 'feature', 'enhancement']
+  patch:
+    labels: ['patch', 'fix', 'bug', 'chore', 'docs']
+  default: patch
+
+template: |
+  ## 📋 Summary
+  
+  This release includes $NUMBER_OF_PULL_REQUESTS pull requests from $CONTRIBUTORS contributors.
+  
+  ## 🔄 Changes
+  
+  $CHANGES
+  
+  ## 🔗 Links
+  
+  - **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+  - **All Issues**: https://github.com/$OWNER/$REPOSITORY/issues?q=milestone%3Av$RESOLVED_VERSION
+  
+  ## 👥 Contributors
+  
+  Thanks to all contributors who made this release possible! 🎉
