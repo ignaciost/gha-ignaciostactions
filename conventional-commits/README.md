@@ -221,7 +221,8 @@ The action enforces these rules by default:
 
 1. **Type**: Must be one of the allowed types (lowercase)
 2. **Scope**: Optional, but must be lowercase if present
-3. **Subject**: 
+3. **Subject**:
+
    - Must be lowercase
    - Minimum 3 characters
    - Maximum 100 characters
