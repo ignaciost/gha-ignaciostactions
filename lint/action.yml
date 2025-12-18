@@ -1,0 +1,56 @@
+name: "Lint Action"
+description: "Ejecuta yamllint y ansible-lint"
+
+inputs:
+  python-version:
+    description: "Python version"
+    default: "3.11"
+    required: false
+
+  ansible_lint_version:
+    description: "ansible-lint version"
+    default: "v25.5.0"
+    required: false
+
+  run_yamllint:
+    description: "Run yamllint (true/false)"
+    default: "true"
+    required: false
+
+  run_ansible_lint:
+    description: "Run ansible-lint (true/false)"
+    default: "true"
+    required: false
+
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: "pip"
+
+    - name: Install ansible-core and dependencies
+      run: |
+        echo "📦 Installing dependencies..."
+        python3 -m pip install --upgrade pip
+        pip3 install -r requirements.txt
+      shell: bash
+
+    - name: Run yamllint
+      if: ${{ inputs.run_yamllint == 'true' }}
+      run: |
+        echo "🧹 Running yamllint..."
+        yamllint --format github .
+      shell: bash
+
+    - name: Run ansible-lint
+      if: ${{ inputs.run_ansible_lint == 'true' }}
+      uses: ansible/ansible-lint@${{ inputs.ansible_lint_version }}
+      with:
+        gh_action_ref: ${{ inputs.ansible_lint_version }}
+        setup_python: false
+        args: "-v"
+        requirements_file: "requirements.yml"
