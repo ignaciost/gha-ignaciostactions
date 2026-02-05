@@ -1,0 +1,97 @@
+name: "Secrets Detection Action"
+description: "Detecta secretos, contraseñas y credenciales en el código usando detect-secrets y gitleaks"
+
+inputs:
+  python-version:
+    description: "Python version"
+    default: "3.11"
+    required: false
+
+  run_detect_secrets:
+    description: "Run detect-secrets (true/false)"
+    default: "true"
+    required: false
+
+  run_gitleaks:
+    description: "Run gitleaks (true/false)"
+    default: "true"
+    required: false
+
+  gitleaks_version:
+    description: "Gitleaks version"
+    default: "v8.18.0"
+    required: false
+
+  detect_secrets_baseline:
+    description: "Path to detect-secrets baseline file (e.g., .secrets.baseline)"
+    default: ".secrets.baseline"
+    required: false
+
+  fail_on_secrets:
+    description: "Fail the workflow if secrets are detected (true/false)"
+    default: "true"
+    required: false
+
+  scan_path:
+    description: "Path to scan (default: current directory)"
+    default: "."
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      if: ${{ inputs.run_detect_secrets == 'true' }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+        cache: "pip"
+
+    - name: Install detect-secrets
+      if: ${{ inputs.run_detect_secrets == 'true' }}
+      run: |
+        echo "📦 Installing detect-secrets..."
+        python3 -m pip install --upgrade pip
+        pip3 install detect-secrets
+      shell: bash
+
+    - name: Run detect-secrets scan
+      if: ${{ inputs.run_detect_secrets == 'true' }}
+      run: |
+        echo "🔍 Running detect-secrets scan..."
+        
+        # Check if baseline exists
+        if [ -f "${{ inputs.detect_secrets_baseline }}" ]; then
+          echo "📋 Using existing baseline: ${{ inputs.detect_secrets_baseline }}"
+          detect-secrets scan --baseline ${{ inputs.detect_secrets_baseline }} ${{ inputs.scan_path }}
+          
+          echo "🔎 Auditing against baseline..."
+          detect-secrets audit ${{ inputs.detect_secrets_baseline }}
+        else
+          echo "⚠️  No baseline found. Creating new baseline..."
+          detect-secrets scan ${{ inputs.scan_path }} > ${{ inputs.detect_secrets_baseline }}
+          echo "✅ Baseline created at ${{ inputs.detect_secrets_baseline }}"
+          echo "⚠️  Please review and commit this baseline file."
+        fi
+        
+        # Check for new secrets
+        EXIT_CODE=0
+        detect-secrets scan --baseline ${{ inputs.detect_secrets_baseline }} ${{ inputs.scan_path }} || EXIT_CODE=$?
+        
+        if [ $EXIT_CODE -ne 0 ]; then
+          echo "❌ New secrets detected!"
+          if [ "${{ inputs.fail_on_secrets }}" == "true" ]; then
+            exit 1
+          fi
+        else
+          echo "✅ No new secrets detected"
+        fi
+      shell: bash
+
+    - name: Run Gitleaks
+      if: ${{ inputs.run_gitleaks == 'true' }}
+      uses: gitleaks/gitleaks-action@v2
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GITLEAKS_VERSION: ${{ inputs.gitleaks_version }}
+        GITLEAKS_ENABLE_COMMENTS: false
